@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- See Relax specification: Ghidra/Framework/SoftwareModeling/data/languages/language_definitions.rxg -->
+
+<language_definitions>
+<!-- Uncomment the following to make the language available in Ghidra -->
+
+  <language processor="AARCH64"
+            endian="little"
+            size="64"
+            variant="AppleSilicon"
+            version="1.5"
+            slafile="AARCH64_AppleSilicon.sla"
+            processorspec="AARCH64.pspec"
+            id="AARCH64:LE:64:golang">
+    <description>Golang</description>
+    <compiler name="golang" spec="golang.cspec" id="golang"/>
+  </language> 
+</language_definitions>

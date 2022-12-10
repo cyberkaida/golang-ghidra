@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- See Relax specification: Ghidra/Framework/SoftwareModeling/data/languages/compiler_spec.rxg -->
+
+<compiler_spec>
+  <data_organization>
+	<pointer_size value="8" />
+	<size_alignment_map>
+          <entry size="1" alignment="1" />
+          <entry size="2" alignment="2" />
+          <entry size="4" alignment="4" />
+          <entry size="8" alignment="8" />
+	</size_alignment_map>
+  </data_organization>
+  <global>
+    <range space="ram"/>
+  </global>
+  <stackpointer register="sp" space="ram"/>
+  <default_proto>
+    <prototype name="golang-stdcall" extrapop="0" stackshift="20">
+      <input>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x0" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x1" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x2" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x3" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x4" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x5" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x6" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x7" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x8" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x9" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x10" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x11" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x12" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x13" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x14" />
+	</pentry>
+	<pentry minsize="1" maxsize="8">
+	  <register name="x15" />
+	</pentry>
+	<!--
+	<pentry minsize="1" maxsize="8">
+	  <addr offset="200" space="stack" />
+	</pentry>
+  	-->
+      </input>
+      <output>
+        <pentry minsize="1" maxsize="8">
+	  <register name="x0" />
+        </pentry>
+      </output>
+      <unaffected>
+	<register name="sp" />
+      </unaffected>
+      <!--
+      <localrange>
+         <range space="stack" first="32" last="300" />
+      </localrange>
+      -->
+    </prototype>
+  </default_proto>
+</compiler_spec>
