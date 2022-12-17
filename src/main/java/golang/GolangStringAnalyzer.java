@@ -9,11 +9,15 @@ import ghidra.app.services.AnalysisPriority;
 import ghidra.app.services.Analyzer;
 import ghidra.app.services.AnalyzerType;
 import ghidra.app.util.importer.MessageLog;
+import ghidra.framework.options.OptionType;
 import ghidra.framework.options.Options;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressIterator;
 import ghidra.program.model.address.AddressSetView;
+import ghidra.program.model.data.Category;
+import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.StringDataType;
 import ghidra.program.model.data.StructureDataType;
 import ghidra.program.model.listing.Data;
@@ -22,17 +26,15 @@ import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.symbol.RefType;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.util.CodeUnitInsertionException;
-import ghidra.program.model.symbol.RefType;
+import ghidra.util.HelpLocation;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.InvalidInputException;
 import ghidra.util.task.TaskMonitor;
-import ghidra.program.model.data.Category;
-import ghidra.program.model.data.CategoryPath;
-import ghidra.program.model.data.DataTypeConflictHandler;
 
 /**
  * @author kaida
@@ -41,6 +43,7 @@ import ghidra.program.model.data.DataTypeConflictHandler;
 public class GolangStringAnalyzer implements Analyzer {
 
 	private int maximum_string_length = 4096;
+	static String maximum_string_length_option_name = "Maximum String Length";
 	
 	
 	@Override
@@ -77,9 +80,7 @@ public class GolangStringAnalyzer implements Analyzer {
 
 	@Override
 	public boolean canAnalyze(Program program) {
-		// TODO Determine if we are a Golang binary and return True
-		// return program.getCompilerSpec().getCompilerSpecID().getIdAsString() == "golang";
-		return true;
+		return program.getCompilerSpec().getCompilerSpecID().getIdAsString().equals("golang");
 	}
 
 	private DataType getGolangStringType(Program program) throws Exception {
@@ -236,14 +237,13 @@ public class GolangStringAnalyzer implements Analyzer {
 
 	@Override
 	public void registerOptions(Options options, Program program) {
-		// TODO Auto-generated method stub
+		options.registerOption(GolangStringAnalyzer.maximum_string_length_option_name, OptionType.INT_TYPE, 4096, new HelpLocation("Golang", null), "The maximum size for a Golang string. Anything larger than this value will be ignored");
 
 	}
 
 	@Override
 	public void optionsChanged(Options options, Program program) {
-		// TODO Auto-generated method stub
-
+		this.maximum_string_length = options.getInt(GolangStringAnalyzer.maximum_string_length_option_name, 4096);
 	}
 
 	@Override
