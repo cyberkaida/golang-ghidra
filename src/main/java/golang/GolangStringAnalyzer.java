@@ -58,7 +58,6 @@ public class GolangStringAnalyzer implements Analyzer {
 
 	@Override
 	public boolean getDefaultEnablement(Program program) {
-		// TODO Determine if this is a Golang program, return True
 		return true;
 	}
 
