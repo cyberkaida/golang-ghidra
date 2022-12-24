@@ -8,3 +8,4 @@ dist
 .gradle
 .classpath
 .antProperties.xml
+.DS_Store
