@@ -16,6 +16,7 @@ import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.StringDataType;
@@ -30,6 +31,7 @@ import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.RefType;
 import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.SourceType;
@@ -38,6 +40,7 @@ import ghidra.program.model.util.CodeUnitInsertionException;
 import ghidra.util.HelpLocation;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.InvalidInputException;
+import ghidra.util.exception.NotYetImplementedException;
 import ghidra.util.task.TaskMonitor;
 
 /**
@@ -153,11 +156,19 @@ public class GolangFunctionAnalyzer implements Analyzer {
 	public boolean added(Program program, AddressSetView set, TaskMonitor monitor, MessageLog log)
 			throws CancelledException {
 			try {
-				getGolangPclntabMagicEnumDataType(program);
-				DataType pcheader_struct = getGolangPcheaderStructureDataType(program);
+				DataType pcheader_magic_datatype = getGolangPclntabMagicEnumDataType(program);
+				DataType pcheader_struct = this.getGolangPcheaderStructureDataType(program); 
 				Symbol runtime_pclntab = program.getSymbolTable().getSymbols("_runtime.pclntab").next();
 				Address pcheader_address = runtime_pclntab.getAddress();
-				Data pclntab = program.getListing().createData(pcheader_address, pcheader_struct);
+
+				Data pcheader = program.getListing().createData(pcheader_address, pcheader_struct);
+				// TODO: Iterate over the components and find the correct field
+				Scalar text_start_field_value = (Scalar) pcheader.getComponent(7).getValue();
+				Address text_start_field_address = pcheader.getComponent(7).getAddress();
+				Address text_start_address = pcheader.getAddress().add(text_start_field_value.getValue());
+
+				program.getReferenceManager().addMemoryReference(text_start_field_address, text_start_address, RefType.DATA, SourceType.ANALYSIS, 0);
+
 			} catch (Exception e) {
 				// do nothing because we are bad
 				log.appendMsg(getName(), "Failed to create DataTypes");
