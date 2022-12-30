@@ -18,20 +18,25 @@ import ghidra.program.model.data.Category;
 import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
+import ghidra.program.model.data.ArrayDataType;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.StringDataType;
 import ghidra.program.model.data.EnumDataType;
 import ghidra.program.model.data.IntegerDataType;
+import ghidra.program.model.data.LongLongDataType;
 import ghidra.program.model.data.PointerDataType;
 import ghidra.program.model.data.UnsignedIntegerDataType;
+import ghidra.program.model.data.VoidDataType;
 import ghidra.program.model.data.StructureDataType;
+import ghidra.program.model.data.TerminatedStringDataType;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.mem.MemoryBufferImpl;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.RefType;
 import ghidra.program.model.symbol.Reference;
@@ -95,6 +100,58 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		return type_list.get(0);
 	}
 
+	private DataType getGolangSliceDataType(Program program) throws Exception {
+		String type_name = "GolangSlice";
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+		DataType golang_slice = program.getDataTypeManager().getDataType(golang_category_path.extend(type_name).getPath());
+		if (golang_slice == null) {
+			Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
+			DataType pointer = new PointerDataType(new VoidDataType());
+			LongLongDataType integer = new LongLongDataType();
+
+			StructureDataType golang_slice_struct = new StructureDataType(
+					golang_category_path,
+					type_name,
+					0 // 0 so Ghidra calculates from fields
+			);
+
+			// TODO: Maybe go to the array pointer and create the correctly size array
+			// The generic pointer should point to this location and Ghidra should figure the rest out
+			golang_slice_struct.add(pointer, pointer.getLength(), "array", "Pointer to the first element of the slice content");
+			golang_slice_struct.add(integer, integer.getLength(), "len", "Length of the array");
+			golang_slice_struct.add(integer, integer.getLength(), "cap", "The initial capacity of the Golang slice");
+			golang_slice_struct.setToDefaultPacking();
+
+			golang_slice = program.getDataTypeManager().addDataType(golang_slice_struct, DataTypeConflictHandler.KEEP_HANDLER);
+
+		}
+		return golang_slice;
+	}
+
+	private Data createGolangSlice(Program program, Address slice_address, DataType slice_type) throws Exception {
+		Data existing_data = program.getListing().getDataContaining(slice_address);
+		if (existing_data == null) {
+			program.getListing().createData(slice_address, getGolangSliceDataType(program));
+		}
+
+		PointerDataType content = new PointerDataType(slice_type, program.getDataTypeManager());
+		LongLongDataType size = new LongLongDataType();
+
+		MemoryBufferImpl content_address_buffer = new MemoryBufferImpl(program.getMemory(), slice_address, content.getLength());
+		Address content_address = PointerDataType.getAddressValue(content_address_buffer, content.getLength(), content.getDefaultSettings());
+
+		MemoryBufferImpl size_buffer = new MemoryBufferImpl(program.getMemory(), slice_address.add(content.getLength()), size.getLength());
+		long content_array_size = ((Scalar)size.getValue(size_buffer, size.getDefaultSettings(), size.getLength())).getValue();
+		
+
+		// TODO: This will truncate large arrays, but these are very large
+		ArrayDataType content_array = new ArrayDataType(slice_type, (int)content_array_size, slice_type.getLength());
+		program.getListing().clearCodeUnits(content_address, content_address.add(content_array.getLength()), true);
+		Data new_data = program.getListing().createData(content_address, content_array);
+		return new_data;
+	}
+
+
 	private DataType getGolangPclntabMagicEnumDataType(Program program) throws Exception {
 		String type_name = "GolangPclntabMagic";
 		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
@@ -110,9 +167,102 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		return golang_pclntab_magic;
 	}
 
-	private DataType getGolangModuleStructureDataType(Program program) throws Exception {
+	private DataType getGolangFunctabStructDataType(Program program) throws Exception {
+		String type_name = "GolangFunctab";
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+		DataType golang_functab_type = program.getDataTypeManager().getDataType(golang_category_path.extend(type_name).getPath());
+		if (golang_functab_type == null) {
+			UnsignedIntegerDataType uint32_t = new UnsignedIntegerDataType(program.getDataTypeManager());
+
+			StructureDataType golang_functab_struct = new StructureDataType(
+					golang_category_path,
+					type_name,
+					0 // 0 so Ghidra calculates from fields
+			);
+
+			// TODO: Confirm these offsets
+			golang_functab_struct.add(uint32_t, uint32_t.getLength(), "entryoff", "The offset to the entry relative to runtime.text");
+			golang_functab_struct.add(uint32_t, uint32_t.getLength(), "funcoff", "The offset to the function relative to runtime.text");
+			golang_functab_struct.setToDefaultPacking();
+
+			golang_functab_type = program.getDataTypeManager().addDataType(golang_functab_struct, DataTypeConflictHandler.KEEP_HANDLER);
+		}
+
+		return golang_functab_type;	
+	}
+
+	private Data createGolangModuleStructure(Program program, Address module_address) throws Exception {
 		// https://github.com/golang/go/blob/5639fcae7fee2cf04c1b87e9a81155ee3bb6ed71/src/runtime/symtab.go#L415
-		throw new NotYetImplementedException();
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+		DataType golang_moduleinfo_type = program.getDataTypeManager().getDataType("/Golang/GolangModuleInfo");
+
+		DataType uint32_t = new IntegerDataType(program.getDataTypeManager());
+
+		Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
+		DataType golang_pcheader_pointer = new PointerDataType(getGolangPcheaderStructureDataType(program));
+		DataType golang_slice = getGolangSliceDataType(program);
+
+		StructureDataType golang_moduleinfo_struct = new StructureDataType(
+				golang_category_path,
+				"GolangModuleInfo",
+				0 // 0 so Ghidra calculates from fields
+		);
+
+		golang_moduleinfo_struct.add(golang_pcheader_pointer, golang_pcheader_pointer.getLength(), "pcHeader", "Pointer to the pcHeader structure");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "funcnametab", "Slice of function names");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "cutab", "Slice of cutab?");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "filetab", "The filetable");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "pctab", "The program counter table");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "pclntab", "The program counter linkage table");
+		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "ftab", "Function table slice");
+		// TODO: Implement the rest of this structure
+
+		golang_moduleinfo_struct.setToDefaultPacking();
+		golang_moduleinfo_type = program.getDataTypeManager().addDataType(golang_moduleinfo_struct, DataTypeConflictHandler.REPLACE_HANDLER);
+
+
+		// Clear any existing data, we will replace this with our structure
+		program.getListing().clearCodeUnits(module_address, module_address.add(golang_moduleinfo_type.getLength()), true);
+		Data golang_moduleinfo = program.getListing().createData(module_address, golang_moduleinfo_type);
+
+		// TODO: Make this a buffer of TerminatedStringDataType
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(1).getAddress(),
+				new ByteDataType()
+				);
+
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(2).getAddress(),
+				uint32_t
+				);
+
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(3).getAddress(),
+				new ByteDataType()
+				);
+
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(4).getAddress(),
+				new ByteDataType()
+				);
+
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(5).getAddress(),
+				new ByteDataType()
+				);
+
+		createGolangSlice(
+				program,
+				golang_moduleinfo.getComponent(6).getAddress(),
+				getGolangFunctabStructDataType(program)
+				);
+
+		return golang_moduleinfo;
 	}
 
 	private DataType getGolangPcheaderStructureDataType(Program program) throws Exception {
@@ -127,8 +277,6 @@ public class GolangFunctionAnalyzer implements Analyzer {
 
 			// TODO: Use the right pointer data type
 			DataType generic_pointer = new PointerDataType();
-			//DataType uint32_t = this.findFirstDataType(program, "uint32_t");
-			//DataType uintptr_t = this.findFirstDataType(program, "uintptr_t");
 
 			StructureDataType golang_pcheader_struct = new StructureDataType(
 					golang_category_path,
@@ -192,6 +340,10 @@ public class GolangFunctionAnalyzer implements Analyzer {
 				program.getReferenceManager().addMemoryReference(text_start_field_address, text_start_address, RefType.DATA, SourceType.ANALYSIS, 0);
 
 				// Parse the module info table
+				Symbol first_module_info = program.getSymbolTable().getSymbols("_runtime.firstmoduledata").next();
+				Address first_module_address = first_module_info.getAddress();
+				createGolangModuleStructure(program, first_module_address);
+				getGolangSliceDataType(program);
 
 			} catch (Exception e) {
 				// do nothing because we are bad
