@@ -19,6 +19,7 @@ import ghidra.program.model.data.CategoryPath;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.ArrayDataType;
+import ghidra.program.model.data.BooleanDataType;
 import ghidra.program.model.data.ByteDataType;
 import ghidra.program.model.data.DataTypeConflictHandler;
 import ghidra.program.model.data.StringDataType;
@@ -104,27 +105,25 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		String type_name = "GolangSlice";
 		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
 		DataType golang_slice = program.getDataTypeManager().getDataType(golang_category_path.extend(type_name).getPath());
-		if (golang_slice == null) {
-			Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
-			DataType pointer = new PointerDataType(new VoidDataType());
-			LongLongDataType integer = new LongLongDataType();
+		Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
+		DataType pointer = new PointerDataType(new VoidDataType(), program.getDataTypeManager());
+		LongLongDataType integer = new LongLongDataType();
 
-			StructureDataType golang_slice_struct = new StructureDataType(
-					golang_category_path,
-					type_name,
-					0 // 0 so Ghidra calculates from fields
-			);
+		StructureDataType golang_slice_struct = new StructureDataType(
+				golang_category_path,
+				type_name,
+				0 // 0 so Ghidra calculates from fields
+		);
 
-			// TODO: Maybe go to the array pointer and create the correctly size array
-			// The generic pointer should point to this location and Ghidra should figure the rest out
-			golang_slice_struct.add(pointer, pointer.getLength(), "array", "Pointer to the first element of the slice content");
-			golang_slice_struct.add(integer, integer.getLength(), "len", "Length of the array");
-			golang_slice_struct.add(integer, integer.getLength(), "cap", "The initial capacity of the Golang slice");
-			golang_slice_struct.setToDefaultPacking();
+		// TODO: Maybe go to the array pointer and create the correctly size array
+		// The generic pointer should point to this location and Ghidra should figure the rest out
+		golang_slice_struct.add(pointer, pointer.getLength(), "array", "Pointer to the first element of the slice content");
+		golang_slice_struct.add(integer, integer.getLength(), "len", "Length of the array");
+		golang_slice_struct.add(integer, integer.getLength(), "cap", "The initial capacity of the Golang slice");
+		golang_slice_struct.setToDefaultPacking();
 
-			golang_slice = program.getDataTypeManager().addDataType(golang_slice_struct, DataTypeConflictHandler.KEEP_HANDLER);
+		golang_slice = program.getDataTypeManager().addDataType(golang_slice_struct, DataTypeConflictHandler.REPLACE_HANDLER);
 
-		}
 		return golang_slice;
 	}
 
@@ -191,6 +190,67 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		return golang_functab_type;	
 	}
 
+	private DataType getFindFuncBucketDataType(Program program) throws Exception {
+		String type_name = "GolangFindFuncBucket";
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+		DataType golang_findfuncbucket_type = program.getDataTypeManager().getDataType(golang_category_path.extend(type_name).getPath());
+		if (golang_findfuncbucket_type == null) {
+			UnsignedIntegerDataType uint32_t = new UnsignedIntegerDataType(program.getDataTypeManager());
+			ByteDataType byte_datatype = new ByteDataType(program.getDataTypeManager());
+			ArrayDataType sixteen_byte_array = new ArrayDataType(byte_datatype, 16, byte_datatype.getLength(), program.getDataTypeManager());
+			// TODO: 16 byte array?
+			// https://github.com/golang/go/blob/f2656f20ea420ada5f15ef06ddf18d2797e18841/src/runtime/symtab.go#L599
+
+			StructureDataType golang_findfuncbucket_struct = new StructureDataType(
+					golang_category_path,
+					type_name,
+					0 // 0 so Ghidra calculates from fields
+			);
+
+			golang_findfuncbucket_struct.add(uint32_t, "idx", "The index of this bucket in the findfunctab");
+			golang_findfuncbucket_struct.add(sixteen_byte_array, "subbuckets", "The subbuckets for this bucket, used to calculate the functab index.");
+			golang_findfuncbucket_struct.setToDefaultPacking();
+
+			golang_findfuncbucket_type = program.getDataTypeManager().addDataType(golang_findfuncbucket_struct, DataTypeConflictHandler.REPLACE_HANDLER);
+		}
+
+		return golang_findfuncbucket_type;
+	}
+
+	private DataType getGolangHMapDataType(Program program) throws Exception {
+		String type_name = "GolangHMap";
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+
+		// TODO: ./src/runtime/map.go
+		throw new NotYetImplementedException();
+	}
+
+	private DataType getGolangBitvectorDataType(Program program) throws Exception {
+		String type_name = "GolangBitVector";
+		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
+
+		IntegerDataType uint32_t = new IntegerDataType(program.getDataTypeManager());
+
+		// The two implementations disagree on the types used, but golang slices start
+		// with a pointer so they still work.
+		// TODO: Check for bugs around the lenght interpretation of this bitvector structure
+		// ./src/reflect/type.go	
+		DataType byte_pointer = getGolangSliceDataType(program); // slices start with a pointer to the data
+		// ./src/runtime/stack.go
+		// PointerDataType byte_pointer = new PointerDataType(new ByteDataType(), program.getDataTypeManager());
+
+		StructureDataType golang_bitvector_struct = new StructureDataType(
+				golang_category_path,
+				type_name,
+				0 // 0 so Ghidra calculates from fields
+		);
+
+		golang_bitvector_struct.add(uint32_t, "n", "Number of bits in the bitvector");
+		golang_bitvector_struct.add(byte_pointer, "bytedata", "The data in the bitvector");
+		golang_bitvector_struct.setToDefaultPacking();
+		return program.getDataTypeManager().addDataType(golang_bitvector_struct, DataTypeConflictHandler.REPLACE_HANDLER);
+	}
+
 	private Data createGolangModuleStructure(Program program, Address module_address) throws Exception {
 		// https://github.com/golang/go/blob/5639fcae7fee2cf04c1b87e9a81155ee3bb6ed71/src/runtime/symtab.go#L415
 		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
@@ -199,8 +259,15 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		DataType uint32_t = new IntegerDataType(program.getDataTypeManager());
 
 		Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
-		DataType golang_pcheader_pointer = new PointerDataType(getGolangPcheaderStructureDataType(program));
+		DataType golang_pcheader_pointer = new PointerDataType(getGolangPcheaderStructureDataType(program), program.getDataTypeManager());
 		DataType golang_slice = getGolangSliceDataType(program);
+
+		DataType void_pointer = new PointerDataType(new VoidDataType(), program.getDataTypeManager());
+
+		DataType funcbucket_pointer = new PointerDataType(getFindFuncBucketDataType(program), program.getDataTypeManager());
+
+		DataType golang_string = GolangStringAnalyzer.getGolangStringType(program);
+		DataType bitvector = getGolangBitvectorDataType(program);
 
 		StructureDataType golang_moduleinfo_struct = new StructureDataType(
 				golang_category_path,
@@ -208,13 +275,87 @@ public class GolangFunctionAnalyzer implements Analyzer {
 				0 // 0 so Ghidra calculates from fields
 		);
 
-		golang_moduleinfo_struct.add(golang_pcheader_pointer, golang_pcheader_pointer.getLength(), "pcHeader", "Pointer to the pcHeader structure");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "funcnametab", "Slice of function names");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "cutab", "Slice of cutab?");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "filetab", "The filetable");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "pctab", "The program counter table");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "pclntab", "The program counter linkage table");
-		golang_moduleinfo_struct.add(golang_slice, golang_slice.getLength(), "ftab", "Function table slice");
+		// This structure is defined in both of these locations
+		// These _should_ be in sync
+		// ./src/runtime/symtab.go
+		// ./src/cmd/link/internal/ld/symtab.go
+
+		golang_moduleinfo_struct.add(golang_pcheader_pointer, "pcHeader", "Pointer to the pcHeader structure");
+
+		golang_moduleinfo_struct.add(golang_slice, "funcnametab", "Slice of function names");
+		golang_moduleinfo_struct.add(golang_slice, "cutab", "Slice of cutab?");
+		golang_moduleinfo_struct.add(golang_slice, "filetab", "The filetable");
+		golang_moduleinfo_struct.add(golang_slice, "pctab", "The program counter table");
+		golang_moduleinfo_struct.add(golang_slice, "pclntab", "The program counter linkage table");
+		golang_moduleinfo_struct.add(golang_slice, "ftab", "Function table slice");
+
+		// This is an array of findfuncbuckets
+		// We can calculate the number of buckets from the total size of the text segment and the bucket size value
+		// below.
+		// TODO: Get the text segment, get it's size and calculate the number of bucket required. Then create the appropriate sized
+		// array
+		int minfunc = 16; // https://github.com/golang/go/blob/f2656f20ea420ada5f15ef06ddf18d2797e18841/src/runtime/symtab.go#L588
+		int pcbucketsize = 256 * minfunc; // https://github.com/golang/go/blob/f2656f20ea420ada5f15ef06ddf18d2797e18841/src/runtime/symtab.go#L589
+
+		golang_moduleinfo_struct.add(funcbucket_pointer, funcbucket_pointer.getLength(), "findfunctab", "Pointer to an array of findfuncbucket structures");
+
+		// First function
+		golang_moduleinfo_struct.add(void_pointer, "minpc", "The start of the first Go function");
+		golang_moduleinfo_struct.add(void_pointer, "maxpc", "The start of the last Go function, note other non-Go functions may be after this point");
+
+		golang_moduleinfo_struct.add(void_pointer, "text", "The start of the text section");
+		golang_moduleinfo_struct.add(void_pointer, "etext", "The end of the text section");
+
+		golang_moduleinfo_struct.add(void_pointer, "noptrdata", "");
+		golang_moduleinfo_struct.add(void_pointer, "enoptrdata", "");
+
+		golang_moduleinfo_struct.add(void_pointer, "data", "The start of the data section");
+		golang_moduleinfo_struct.add(void_pointer, "edata", "The end of the data section");
+
+		golang_moduleinfo_struct.add(void_pointer, "bss", "The start of the bss section");
+		golang_moduleinfo_struct.add(void_pointer, "ebss", "The end of the bss section");
+
+		golang_moduleinfo_struct.add(void_pointer, "noptrbss", "The start of the noptrbss section");
+		golang_moduleinfo_struct.add(void_pointer, "enoptrbss", "The end of the noptrbss section");
+
+		// TODO: This is only in the newer golang compiler
+		//golang_moduleinfo_struct.add(void_pointer, "covctrs", "The start of the code coverage counters section");
+		//golang_moduleinfo_struct.add(void_pointer, "ecovctrs", "The end of the code coverage counters section");
+
+		golang_moduleinfo_struct.add(void_pointer, "end", "The end?");
+		golang_moduleinfo_struct.add(void_pointer, "gcdata", "Garbage collected data in the data section");
+		golang_moduleinfo_struct.add(void_pointer, "gcbss", "Garbage collected data in the bss section");
+		golang_moduleinfo_struct.add(void_pointer, "types", "The start of the types section");
+		golang_moduleinfo_struct.add(void_pointer, "etypes", "The end of the types section");
+
+		// TODO: This is only in the newer golang compiler
+		// golang_moduleinfo_struct.add(void_pointer, "rodata", "The start of the read only data section");
+
+		// TODO: This is only in the newer golang compiler
+		// golang_moduleinfo_struct.add(void_pointer, "gofunc", "go.func.*");
+
+		// TODO: Implement the textsect structure
+		// textsectionmapSym
+		golang_moduleinfo_struct.add(golang_slice, "textsectmap", "Slice of textsect structures");
+
+		golang_moduleinfo_struct.add(golang_slice, "typelinks", "Slice of int32s, offets from types (above)");
+
+		golang_moduleinfo_struct.add(golang_slice, "itablinks", "Slice of itab strucutres");
+		golang_moduleinfo_struct.add(golang_slice, "ptab", "Slice of ptab strucutres");
+
+
+		// If we're in BuildMode == BuildModePlugin
+		golang_moduleinfo_struct.add(golang_string, "pluginpath", "The plugin path if compiled in BuildModePlugin");
+		golang_moduleinfo_struct.add(golang_slice, "pkghashes", "A slice of modulehash structures");
+
+		golang_moduleinfo_struct.add(golang_string, "modulename", "The name of this module, may be null");
+		golang_moduleinfo_struct.add(golang_slice, "modulehashes", "A slice of modulehash structures");
+
+		golang_moduleinfo_struct.add(new BooleanDataType(program.getDataTypeManager()), "hasmain", "True if this program has a main function");
+
+		golang_moduleinfo_struct.add(bitvector, "gcdatamask", "The garbage collector mask for the data section");
+		golang_moduleinfo_struct.add(bitvector, "gcbssmask", "The garbage collector mask for the bss section");
+
 		// TODO: Implement the rest of this structure
 
 		golang_moduleinfo_struct.setToDefaultPacking();

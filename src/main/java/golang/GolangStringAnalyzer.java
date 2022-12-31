@@ -82,7 +82,7 @@ public class GolangStringAnalyzer implements Analyzer {
 		return program.getCompilerSpec().getCompilerSpecID().getIdAsString().equals("golang");
 	}
 
-	private DataType getGolangStringType(Program program) throws Exception {
+	static DataType getGolangStringType(Program program) throws Exception {
 		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
 		DataType golang_string = program.getDataTypeManager().getDataType("/Golang/GolangString");
 		
@@ -130,7 +130,7 @@ public class GolangStringAnalyzer implements Analyzer {
 			
 			golang_string_structure.add(pointer, pointer.getLength(), "content", "Pointer to the string content");
 			golang_string_structure.add(length, length.getLength(), "length", "The length of the string content in bytes");
-			
+			golang_string_structure.setToDefaultPacking();	
 			
 			golang_string = program.getDataTypeManager().addDataType(golang_string_structure, DataTypeConflictHandler.KEEP_HANDLER);
 		}
