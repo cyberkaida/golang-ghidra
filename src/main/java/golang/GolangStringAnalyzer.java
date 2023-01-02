@@ -36,6 +36,8 @@ import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.InvalidInputException;
 import ghidra.util.task.TaskMonitor;
 
+import golang.GolangTypes;
+
 /**
  * @author kaida
  *
@@ -79,74 +81,22 @@ public class GolangStringAnalyzer implements Analyzer {
 
 	@Override
 	public boolean canAnalyze(Program program) {
-		return program.getCompilerSpec().getCompilerSpecID().getIdAsString().equals("golang");
+		GolangTypes golang_types = new GolangTypes(program);
+		return golang_types.isGo();
 	}
 
-	static DataType getGolangStringType(Program program) throws Exception {
-		CategoryPath golang_category_path = new CategoryPath(CategoryPath.ROOT, "Golang");
-		DataType golang_string = program.getDataTypeManager().getDataType("/Golang/GolangString");
-		
-		if (golang_string == null) {
-			DataType char_type = program.getDataTypeManager().getDataType("/char");
-			DataType char_pointer = program.getDataTypeManager().getPointer(char_type);
-			DataType pointer = char_pointer;
-			
-			if (pointer == null) {
-				throw new Exception("Could not find char* DataType");
-			}
-			
-			DataType length = null;
-			// Get the size field the same way Go's debugger does
-			// https://github.com/golang/debug/blob/36716089901d6bd6afeaa2677562ce1491eb20c1/internal/core/read.go#L124
-			
-			if (pointer.getLength() == 8) {
-				// 64 bit
-				length = program.getDataTypeManager().getDataType("/ulonglong");
-			} else if (pointer.getLength() == 4) {
-				// 32 bit
-				length = program.getDataTypeManager().getDataType("/uint");
-			} else {
-				// ???? bit
-				ArrayList<DataType> type_list = new ArrayList<>();
-				program.getDataTypeManager().findDataTypes("size_t", type_list);
-				if (type_list.size() == 0) {
-					throw new Exception("size_t DataType could not be found. Is size_t defined in your program's DataTypes?");
-				}
-				
-				length = type_list.get(0);
-			}
-			
-			if (length == null) {
-				throw new Exception("size_t DataType not defined. Is size_t defined in your program's DataTypes?");
-			}
-			
-			Category golang_category = program.getDataTypeManager().createCategory(golang_category_path);
-			
-			StructureDataType golang_string_structure = new StructureDataType(
-					golang_category_path,
-					"GolangString",
-					0
-			);
-			
-			golang_string_structure.add(pointer, pointer.getLength(), "content", "Pointer to the string content");
-			golang_string_structure.add(length, length.getLength(), "length", "The length of the string content in bytes");
-			golang_string_structure.setToDefaultPacking();	
-			
-			golang_string = program.getDataTypeManager().addDataType(golang_string_structure, DataTypeConflictHandler.KEEP_HANDLER);
-		}
-		return golang_string;
-	}
 	
 	@Override
 	public boolean added(Program program, AddressSetView set, TaskMonitor monitor, MessageLog log)
 			throws CancelledException {
 		
 		// Get the datatype
-		DataType golang_string;
+		GolangTypes golang_types = new GolangTypes(program);
+		DataType golang_string = null;
 		try {
-			golang_string = this.getGolangStringType(program);
+			golang_string = golang_types.getGolangStringType();
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.appendException(e);
 			return false;
 		}
 		
