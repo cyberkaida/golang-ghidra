@@ -46,9 +46,6 @@
 				<pentry minsize="1" maxsize="8">
 					<register name="R11" />
 				</pentry>
-				<pentry minsize="1" maxsize="8">
-					<addr offset="144" space="stack" />
-				</pentry>
 				<!--
 				<pentry minsize="1" maxsize="8">
 					<addr offset="200" space="stack" />
