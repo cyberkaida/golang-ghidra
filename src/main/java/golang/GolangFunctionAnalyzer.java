@@ -37,6 +37,7 @@ import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.mem.MemoryBufferImpl;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.RefType;
@@ -102,6 +103,24 @@ public class GolangFunctionAnalyzer implements Analyzer {
 		return type_list.get(0);
 	}
 
+	public Address getBuildInfoAddress(Program program) throws Exception {
+		GolangTypes golang_types = new GolangTypes(program);
+		Address go_build_info = null;
+		MemoryBlock block = program.getMemory().getBlock("__go_buildinfo");
+		if (block != null) {
+		 go_build_info = block.getStart();
+		} else {
+			block = program.getMemory().getBlock(".data");
+			if (block != null) {
+				go_build_info = block.getStart();
+				if (!golang_types.isBuildinfoAtAddress(go_build_info)) {
+					throw new Exception("BuildInfo not at expected address");
+				}
+			}
+		}
+		return go_build_info;
+	}
+
 	@Override
 	public boolean added(Program program, AddressSetView set, TaskMonitor monitor, MessageLog log)
 			throws CancelledException {
@@ -113,8 +132,7 @@ public class GolangFunctionAnalyzer implements Analyzer {
 				// Parse the pcheader structure
 				monitor.setMessage("Parsing Golang pcheader");
 
-
-				Address go_build_info = program.getMemory().getBlock("__go_buildinfo").getStart();
+				Address go_build_info = getBuildInfoAddress(program);
 				api.createData(go_build_info, golang_types.getGolangBuildInfoDataType());
 				Symbol runtime_pclntab = program.getSymbolTable().getSymbols("_runtime.pclntab").next();
 				Address pcheader_address = runtime_pclntab.getAddress();
