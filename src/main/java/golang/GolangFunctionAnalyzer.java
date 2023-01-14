@@ -46,6 +46,7 @@ import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.util.CodeUnitInsertionException;
+import ghidra.util.DataConverter;
 import ghidra.util.HelpLocation;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.InvalidInputException;
@@ -149,7 +150,6 @@ public class GolangFunctionAnalyzer implements Analyzer {
 
 				Symbol runtime_pclntab = golang_types.getPclntabSymbol();
 				Address pcheader_address = runtime_pclntab.getAddress();
-
 				Data pcheader = golang_types.createPcheader(pcheader_address);
 
 				// Sometimes the symbol is not at the correct address (on Windows) or stripped
@@ -159,6 +159,14 @@ public class GolangFunctionAnalyzer implements Analyzer {
 				if (api.getDataAt(first_module_address) == null) {
 					if (runtime_pclntab.getReferenceCount() > 0) {
 						first_module_address = runtime_pclntab.getReferences()[0].getFromAddress();
+					} else {
+						// convert the address to bytes, then find these bytes in memory, this is probably
+						// the module table
+						DataConverter converter = DataConverter.getInstance(program.getMemory().isBigEndian());
+						byte[] address_bytes = converter.getBytes(runtime_pclntab.getAddress().getOffset());
+						MemoryBlock data_block = program.getMemory().getBlock(".data");
+						Address first_ref = api.find(data_block.getStart(), address_bytes);
+						first_module_address = first_ref;
 					}
 				}
 
