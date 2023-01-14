@@ -36,6 +36,7 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.Memory;
 import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.mem.MemoryBufferImpl;
@@ -134,17 +135,43 @@ public class GolangFunctionAnalyzer implements Analyzer {
 
 				Address go_build_info = getBuildInfoAddress(program);
 				api.createData(go_build_info, golang_types.getGolangBuildInfoDataType());
-				Symbol runtime_pclntab = program.getSymbolTable().getSymbols("_runtime.pclntab").next();
+
+				// On Windows the .text block can start with a build info blob
+				MemoryBlock text_block = program.getMemory().getBlock(".text");
+				if (text_block != null) {
+					if (golang_types.isBuildinfoAtAddress(text_block.getStart())) {
+						Address start = text_block.getStart();
+						DataType build_info = golang_types.getGolangBuildInfoDataType();
+						api.clearListing(start, start.add(build_info.getLength()));
+						api.createData(go_build_info, build_info);
+					}
+				}
+
+				Symbol runtime_pclntab = golang_types.getPclntabSymbol();
 				Address pcheader_address = runtime_pclntab.getAddress();
 
 				Data pcheader = golang_types.createPcheader(pcheader_address);
 
-				// Parse the module info table
-				Symbol first_module_info = program.getSymbolTable().getSymbols("_runtime.firstmoduledata").next();
+				// Sometimes the symbol is not at the correct address (on Windows) or stripped
+				// We can find the Module Info Table via an xref
+				Symbol first_module_info = golang_types.getFirstModuleDataSymbol();
 				Address first_module_address = first_module_info.getAddress();
-				golang_types.createGolangModuleStructure(first_module_address);
+				if (api.getDataAt(first_module_address) == null) {
+					if (runtime_pclntab.getReferenceCount() > 0) {
+						first_module_address = runtime_pclntab.getReferences()[0].getFromAddress();
+					}
+				}
 
-				Symbol module_slice = program.getSymbolTable().getSymbols("_runtime.modulesSlice").next();
+				// Parse the module info table
+				try {
+					golang_types.createGolangModuleStructure(first_module_address);
+				} catch (Exception e) {
+					log.appendMsg("Failed to find module structure. Some data may be missing");
+					log.appendException(e);
+				}
+
+
+				Symbol module_slice = golang_types.getModuleSliceSymbol();
 				api.createData(module_slice.getAddress(), new PointerDataType(golang_types.getGolangModuleStructureDataType(), program.getDataTypeManager()));
 
 			} catch (Exception e) {
@@ -173,13 +200,11 @@ public class GolangFunctionAnalyzer implements Analyzer {
 	@Override
 	public void analysisEnded(Program program) {
 		// TODO Auto-generated method stub
-
 	}
 
 	@Override
 	public boolean isPrototype() {
-		// TODO This is very beta ;)
-		return true;
+		return false;
 	}
 
 }
