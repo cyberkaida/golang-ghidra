@@ -14,6 +14,17 @@
             processorspec="AARCH64.pspec"
             id="AARCH64:LE:64:golang">
     <description>Golang</description>
-    <compiler name="golang" spec="golang.cspec" id="golang"/>
+    <compiler name="golang" spec="golang-aarch64.cspec" id="golang"/>
+  </language> 
+  <language processor="x86"
+            endian="little"
+            size="64"
+            variant="Windows"
+            version="2.0.0"
+            slafile="x86-64.sla"
+            processorspec="x86-64.pspec"
+            id="x86:LE:64:golang">
+    <description>Golang</description>
+    <compiler name="golang" spec="golang-amd64.cspec" id="golang"/>
   </language> 
 </language_definitions>

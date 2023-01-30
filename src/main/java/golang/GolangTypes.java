@@ -22,9 +22,12 @@ import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.VoidDataType;
 import ghidra.program.model.listing.Data;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.model.mem.MemoryBufferImpl;
 import ghidra.program.model.scalar.Scalar;
 import ghidra.program.model.symbol.RefType;
+import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.util.exception.NotYetImplementedException;
 
@@ -50,7 +53,45 @@ public class GolangTypes {
 			is_go = true;
 		}
 
+		// For Windows
+		MemoryBlock text_block = program.getMemory().getBlock(".text");
+		if (text_block != null) {
+			is_go = isBuildinfoAtAddress(text_block.getStart());
+		}
+
+		// For Windows
+		MemoryBlock block = program.getMemory().getBlock(".data");
+		if (!is_go && block != null) {
+			is_go = isBuildinfoAtAddress(block.getStart());
+		}
+
 		return is_go;
+	}
+
+	public boolean isBuildinfoAtAddress(Address address) {
+		MemoryBlock block = program.getMemory().getBlock(address);
+		boolean is_buildinfo = false;
+		if (block != null) {
+			// Golang buildinfo magic
+			// https://github.com/golang/go/blob/master/src/debug/buildinfo/buildinfo.go#L170
+			// ff 20 47 6f 20 62 75 69 6c 64 69 6e 66 3a
+			byte[] buildinfo_magic = {-1 /*0xFF*/, 0x20, 0x47, 0x6f, 0x20, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x69, 0x6e, 0x66, 0x3a };
+
+			Address start = address;
+			is_buildinfo = true;
+			for (int i = 0; i < buildinfo_magic.length; i++) {
+				try {
+					byte current_byte = block.getByte(start.add(i));
+					if (current_byte != buildinfo_magic[i]) {
+						is_buildinfo = false;
+						break;
+					}
+				} catch (MemoryAccessException e) {
+					is_buildinfo = false;
+				}
+			}
+		}
+		return is_buildinfo;
 	}
 
 	StructureDataType createGolangStructure(String type_name) throws Exception {
@@ -365,7 +406,7 @@ public class GolangTypes {
 		DataType functab_data_type = getFunctabStructDataType();
 		ArrayDataType func_array = new ArrayDataType(functab_data_type, (int)nfuncs, functab_data_type.getLength());
 		Data function_table = program.getListing().createData(ftab_address, func_array);
-		Symbol text_symbol = program.getSymbolTable().getSymbols("_runtime.text").next();
+		Symbol text_symbol = getRuntimeTextSymbol();
 
 		// Now we can iterate over each element of the functab array and
 		// create any missing functions.
@@ -445,4 +486,45 @@ public class GolangTypes {
 		
 		return saveDataType(golang_string_structure);
 	}
+
+	Symbol getPclntabSymbol() {
+		Symbol found = program.getSymbolTable().getSymbols("_runtime.pclntab").next();
+		if (found == null) {
+			found = program.getSymbolTable().getSymbols("runtime.pclntab").next();
+		}
+
+		return found;
+	}
+
+	Symbol getFirstModuleDataSymbol() {
+		Symbol found = program.getSymbolTable().getSymbols("_runtime.firstmoduledata").next();
+		if (found == null) {
+			found = program.getSymbolTable().getSymbols("runtime.firstmoduledata").next();
+		}
+		return found;
+	}
+
+	Symbol getModuleSliceSymbol() {
+		Symbol found = program.getSymbolTable().getSymbols("_runtime.modulesSlice").next();
+		if (found == null) {
+			found = program.getSymbolTable().getSymbols("runtime.modulesSlice").next();
+		}
+		return found;
+	}
+
+	Symbol getRuntimeTextSymbol() {
+		Symbol found = program.getSymbolTable().getSymbols("_runtime.text").next();
+		if (found == null) {
+			MemoryBlock text_block = program.getMemory().getBlock(".text");
+			try {
+				program.getSymbolTable().createLabel(text_block.getStart(), "runtime.text", SourceType.ANALYSIS);
+			} catch (Exception e) {
+				// we tried
+			}
+			found = program.getSymbolTable().getSymbols("runtime.text").next();
+
+		}
+		return found;
+	}
+
 }
