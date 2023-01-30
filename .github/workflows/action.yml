@@ -1,0 +1,57 @@
+name: Build extension
+on: [push]
+jobs:
+  build: 
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        GHIDRA_VERSION: [10.2.2, 10.2.1, 10.2] 
+
+    env:
+       # Note: we store the ghidra installs in a directory outside the project to avoid accidentally packaging the whole ghidra install - thanks gradle :/
+      GHIDRA_PATH: ~/.ghidra 
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Cache Ghidra build
+        id: cache-ghidra-builds
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.GHIDRA_PATH }}
+          key: ghidra-${{ matrix.GHIDRA_VERSION }}
+
+      - name: Download Ghidra build
+        if: steps.cache-ghidra-builds.outputs.cache-hit != 'true'
+        run: | 
+          mkdir -p ${{ env.GHIDRA_PATH }}
+          # HACK: running this curl/jq first seems to avoid the second one failing - don't know why, pls fix.
+          curl --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq .
+          URL=$(curl https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq -r '.assets[]| select(.name | test("ghidra_${{ matrix.GHIDRA_VERSION }}.*.zip"))|.browser_download_url')
+          echo "Downloading ${{ matrix.GHIDRA_VERSION }} from ${URL}"
+          wget -nv -O /tmp/ghidra_${{ matrix.GHIDRA_VERSION }}.zip $URL 
+          unzip -q -d ${{ env.GHIDRA_PATH }} /tmp/ghidra_${{ matrix.GHIDRA_VERSION }}.zip
+
+      - name: Set Ghidra dir
+        run: echo "GHIDRA_INSTALL_DIR=$(readlink -e ${{ env.GHIDRA_PATH }}/ghidra_${{ matrix.GHIDRA_VERSION }}_PUBLIC)" >> $GITHUB_ENV
+
+      - name: Gradle build
+        run: |
+          gradle buildExtension
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: extension
+          path: dist/*.zip
