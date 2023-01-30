@@ -37,8 +37,8 @@ jobs:
         run: | 
           mkdir -p ${{ env.GHIDRA_PATH }}
           # HACK: running this curl/jq first seems to avoid the second one failing - don't know why, pls fix.
-          curl https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq .
-          URL=$(curl https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq -r '.assets[]| select(.name | test("ghidra_${{ env.GHIDRA_VERSION }}.*.zip"))|.browser_download_url')
+          curl --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq .
+          URL=$(curl https://api.github.com/repos/nationalsecurityagency/ghidra/releases/tags/Ghidra_${{ matrix.GHIDRA_VERSION }}_build | jq -r '.assets[]| select(.name | test("ghidra_${{ matrix.GHIDRA_VERSION }}.*.zip"))|.browser_download_url')
           echo "Downloading ${{ matrix.GHIDRA_VERSION }} from ${URL}"
           wget -nv -O /tmp/ghidra_${{ matrix.GHIDRA_VERSION }}.zip $URL 
           unzip -q -d ${{ env.GHIDRA_PATH }} /tmp/ghidra_${{ matrix.GHIDRA_VERSION }}.zip
