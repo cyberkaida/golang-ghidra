@@ -6,7 +6,7 @@ jobs:
 
     strategy:
       matrix:
-        GHIDRA_VERSION: [10.2.2, 10.2.1, 10.2] 
+        GHIDRA_VERSION: [10.3, 10.2.2, 10.2.1, 10.2] 
 
     env:
        # Note: we store the ghidra installs in a directory outside the project to avoid accidentally packaging the whole ghidra install - thanks gradle :/
